@@ -31,6 +31,18 @@ Enter the the Infer API
 /generate
 ```
 
+Enter the the Port
+```
+7000
+```
+
+### Input
+```json
+{
+  "text":  "Face of a yellow cat, high resolution, sitting on a park bench" , 
+  "max_length": 50
+}
+```
 
 Enter all the required details to Import your model. Refer [this link](https://docs.inferless.com/integrations/github-custom-code) for more information on model import.
 
