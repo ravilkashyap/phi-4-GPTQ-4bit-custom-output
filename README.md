@@ -39,7 +39,7 @@ Enter the the Port
 ### Input
 ```json
 {
-  "text":  "Face of a yellow cat, high resolution, sitting on a park bench" , 
+  "prompt":  "Once upon a time ", 
   "max_length": 50
 }
 ```
