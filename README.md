@@ -44,6 +44,6 @@ Enter the the Port
 }
 ```
 
-Enter all the required details to Import your model. Refer [this link](https://docs.inferless.com/integrations/github-custom-code) for more information on model import.
+Enter all the required details to Import your model. Refer [this link](https://docs.inferless.com/integrations/docker) for more information on model import.
 
 The following is a sample Input and Output JSON for this model which you can use while importing this model on Inferless.
