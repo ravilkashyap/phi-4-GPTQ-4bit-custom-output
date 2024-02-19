@@ -23,7 +23,7 @@ Select the PyTorch as framework and choose **Docker(custom code)** as your model
 Enter the the Health API 
 
 ```
-/infer
+/healthcheck
 ```
 
 Enter the the Infer API 
