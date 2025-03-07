@@ -1,69 +1,73 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import os
-from transformers import pipeline
-import re, json
+import re
+import json
 import logging
+from vllm import LLM, SamplingParams
+from typing import List, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
+# Default Generation Parameters
 GENERATION_ARGS = {
-    "max_new_tokens": 256,
-    "return_full_text": False,
+    "max_tokens": 512,  # Updated as per schema
     "temperature": 0.1,
-    "do_sample": False,
-    "top_k": 40,
     "top_p": 1.0,
+    "top_k": 40,
 }
 
 
-class Phi4Model:
+class InferlessPythonModel:
     def __init__(self):
-        self.pipe = None
+        self.llm = None
 
-    def load(self):
+    def initialize(self):
         try:
-            """Load the Phi-4 model."""
-            self.pipe = pipeline(
-                "text-generation",
-                model="microsoft/phi-4",
-                trust_remote_code=True,
-                model_kwargs={"torch_dtype": "auto"},
-                device_map=0,
-            )
-            logger.info("Phi-4 model loaded successfully.")
+            self.llm = LLM(model="kaitchup/Phi-4-AutoRound-GPTQ-4bit", quantization="gptq")
+            logger.info("Inferless model initialized successfully.")
         except Exception as e:
-            logger.error(f"Error loading Phi-4 model: {str(e)}")
-            raise RuntimeError("Failed to load the Phi-4 model.") from e
+            logger.error(f"Failed to initialize the Inferless model: {str(e)}")
+            raise RuntimeError("Model initialization failed.") from e
 
-    def generate(self, prompt: str, **kwargs):
-
-        if self.pipe is None:
-            logger.error("Model is not loaded. Cannot generate text.")
-            raise HTTPException(status_code=500, detail="Model is not loaded.")
+    def infer(self, prompt: str, **kwargs):
+        if self.llm is None:
+            logger.error("Model is not initialized. Cannot generate text.")
+            raise HTTPException(status_code=500, detail="Model is not initialized.")
 
         try:
-            """Generate text dynamically using provided arguments."""
-            args = {
-                **GENERATION_ARGS,
-                **{k: v for k, v in kwargs.items() if v is not None},
-            }
-            # Ensure `return_full_text` is included
-            args.setdefault("return_full_text", GENERATION_ARGS["return_full_text"])
+            system_prompt = kwargs.get("system_prompt", "You are a friendly bot.")
+            sampling_params = SamplingParams(
+                temperature=kwargs.get("temperature", GENERATION_ARGS["temperature"]),
+                top_p=kwargs.get("top_p", GENERATION_ARGS["top_p"]),
+                top_k=int(kwargs.get("top_k", GENERATION_ARGS["top_k"])),
+                max_tokens=kwargs.get("max_tokens", GENERATION_ARGS["max_tokens"]),
+            )
 
-            return self.pipe(prompt, **args)[0]["generated_text"]
+            conversation = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
 
+            outputs = self.llm.chat(conversation, sampling_params)
+            result_output = [output.outputs[0].text for output in outputs]
+
+            return {"generated_text": result_output[0]}
+        
         except Exception as e:
             logger.error(f"Text generation failed: {str(e)}")
             raise HTTPException(status_code=500, detail="Text generation failed.")
 
+    def finalize(self):
+        self.llm = None
+
+
 
 def postprocessing(text):
     """Extracts the classification value from JSON inside a text block."""
-    match = re.search(r"```json\n(.*?)\n```", text, re.DOTALL)
+    match = re.search(r'```json\n(.*?)\n```', text, re.DOTALL)
     if match:
         try:
             json_str = match.group(1)  # Extract JSON content
@@ -73,46 +77,58 @@ def postprocessing(text):
             logger.error("Invalid JSON format in generated text.")
             return "Invalid JSON"
     logger.error("No JSON found in generated text.")
+    logger.error(text)
     return "No JSON Found"
 
 
 class InferRequest(BaseModel):
-    prompt: str
-    max_new_tokens: int = Field(
-        default=GENERATION_ARGS["max_new_tokens"],
-        gt=0,
-        le=512,
-        description="Max new tokens",
+    prompt: List[str] = Field(
+        default=[""],
+        description="Input text prompt"
     )
-    temperature: float = Field(
-        default=GENERATION_ARGS["temperature"],
+    system_prompt: Optional[List[str]] = Field(
+        default=[""],
+        description="System prompt defining behavior"
+    )
+    temperature: Optional[List[float]] = Field(
+        default=[GENERATION_ARGS["temperature"]],
         ge=0.0,
         le=1.0,
         description="Sampling temperature",
+        example=[0.1]
     )
-    do_sample: bool = Field(
-        default=GENERATION_ARGS["do_sample"], description="Enable sampling"
-    )
-    top_k: int = Field(
-        default=GENERATION_ARGS["top_k"], ge=1, le=100, description="Top-k sampling"
-    )
-    top_p: float = Field(
-        default=GENERATION_ARGS["top_p"],
+    top_p: Optional[List[float]] = Field(
+        default=[GENERATION_ARGS["top_p"]],
         ge=0.0,
         le=1.0,
-        description="Top-p sampling (nucleus)",
+        description="Top-p sampling ",
+        example=[0.1]
+    )
+    max_tokens: Optional[List[int]] = Field(
+        default=[GENERATION_ARGS["max_tokens"]],
+        gt=0,
+        le=512,
+        description="Max tokens to generate",
+        example=[128]
+    )
+    top_k: Optional[List[int]] = Field(
+        default=[GENERATION_ARGS["top_k"]],
+        ge=1,
+        le=100,
+        description="Top-k sampling",
+        example=[40]
     )
 
 
 # Create the FastAPI app
 app = FastAPI()
-# Create the Phi-4 model
-model = Phi4Model()
-# Load the Phi-4 model
+# Create and initialize the Inferless model
+model = InferlessPythonModel()
 try:
-    model.load()
+    model.initialize()
 except RuntimeError as e:
     logger.critical(f"Application startup failed: {str(e)}")
+
 
 
 @app.get("/healthcheck", status_code=200)
@@ -125,26 +141,33 @@ async def healthcheck():
 async def generate(request: InferRequest):
     """Generate text based on input prompt and parameters."""
     try:
-        generated_text = model.generate(
-            request.prompt,
-            max_new_tokens=request.max_new_tokens,
-            temperature=request.temperature,
-            do_sample=request.do_sample,
-            top_k=request.top_k,
-            top_p=request.top_p,
+        generated_text = model.infer(
+            request.prompt[0],
+            system_prompt=request.system_prompt[0] if request.system_prompt else None,
+            temperature=request.temperature[0],
+            top_p=request.top_p[0],
+            max_tokens=request.max_tokens[0],
+            top_k=request.top_k[0],
         )
-        extracted_json = postprocessing(generated_text)
+
+        extracted_json = postprocessing(generated_text["generated_text"])
+        
+        messages_prompt = {}
+        if request.system_prompt:
+            messages_prompt["system"] = request.system_prompt[0]
+        if request.prompt:
+            messages_prompt["user"] = request.prompt[0]
 
         # Build response
         response = {
             "data": [
                 {
-                    "prompt": request.prompt,
+                    "prompt": messages_prompt,
                     "output": [extracted_json],  # Output as a list
                     "params": {
-                        "temperature": request.temperature,
-                        "top_k": request.top_k,
-                        "top_p": request.top_p,
+                        "temperature": request.temperature[0],
+                        "top_k": request.top_k[0],
+                        "top_p": request.top_p[0],
                     }
                 }
             ],
