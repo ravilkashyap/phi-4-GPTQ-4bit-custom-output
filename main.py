@@ -54,7 +54,7 @@ class InferlessPythonModel:
             outputs = self.llm.chat(conversation, sampling_params)
             result_output = [output.outputs[0].text for output in outputs]
 
-            return {"generated_text": result_output[0]}
+            return result_output[0]
         
         except Exception as e:
             logger.error(f"Text generation failed: {str(e)}")
@@ -82,41 +82,41 @@ def postprocessing(text):
 
 
 class InferRequest(BaseModel):
-    prompt: List[str] = Field(
-        default=[""],
-        description="Input text prompt"
+    prompt: Optional[str] = Field(
+        default=None,
+        description="Input text prompt",
     )
-    system_prompt: Optional[List[str]] = Field(
-        default=[""],
-        description="System prompt defining behavior"
+    system_prompt: Optional[str] = Field(
+        default=None,
+        description="System prompt defining behavior",
     )
-    temperature: Optional[List[float]] = Field(
-        default=[GENERATION_ARGS["temperature"]],
+    temperature: Optional[float] = Field(
+        default=0.1,
         ge=0.0,
         le=1.0,
         description="Sampling temperature",
-        example=[0.1]
+        example=0.1
     )
-    top_p: Optional[List[float]] = Field(
-        default=[GENERATION_ARGS["top_p"]],
+    top_p: Optional[float] = Field(
+        default=0.1,
         ge=0.0,
         le=1.0,
-        description="Top-p sampling ",
-        example=[0.1]
+        description="Top-p sampling",
+        example=0.1
     )
-    max_tokens: Optional[List[int]] = Field(
-        default=[GENERATION_ARGS["max_tokens"]],
+    max_tokens: Optional[int] = Field(
+        default=128,
         gt=0,
         le=512,
         description="Max tokens to generate",
-        example=[128]
+        example=128
     )
-    top_k: Optional[List[int]] = Field(
-        default=[GENERATION_ARGS["top_k"]],
+    top_k: Optional[int] = Field(
+        default=40,
         ge=1,
         le=100,
         description="Top-k sampling",
-        example=[40]
+        example=40
     )
 
 
@@ -140,17 +140,25 @@ async def healthcheck():
 @app.post("/generate")
 async def generate(request: InferRequest):
     """Generate text based on input prompt and parameters."""
+    """Generate text based on input prompt and parameters."""
     try:
-        generated_text = model.infer(
-            request.prompt[0],
-            system_prompt=request.system_prompt[0] if request.system_prompt else None,
-            temperature=request.temperature[0],
-            top_p=request.top_p[0],
-            max_tokens=request.max_tokens[0],
-            top_k=request.top_k[0],
-        )
+        # Ensure prompt is provided
+        if not request.prompt:
+            raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
 
-        extracted_json = postprocessing(generated_text["generated_text"])
+        # Call the model inference function
+        generated_text = model.infer(
+            request.prompt,
+            system_prompt=request.system_prompt,
+            temperature=request.temperature,
+            top_p=request.top_p,
+            max_tokens=request.max_tokens,
+            top_k=request.top_k,
+        )
+        logger.info("generated_text: ",generated_text)
+
+        extracted_json = postprocessing(str(generated_text))
+
         
         messages_prompt = {}
         if request.system_prompt:
@@ -162,7 +170,7 @@ async def generate(request: InferRequest):
         response = {
             "data": [
                 {
-                    "prompt": messages_prompt,
+                    "prompt": [messages_prompt],
                     "output": [extracted_json],  # Output as a list
                     "params": {
                         "temperature": request.temperature[0],
