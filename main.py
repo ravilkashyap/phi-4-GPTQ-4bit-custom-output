@@ -32,7 +32,7 @@ class Phi4Model:
                 model="microsoft/phi-4",
                 trust_remote_code=True,
                 model_kwargs={"torch_dtype": "auto"},
-                device_map="auto",
+                device_map=0,
             )
             logger.info("Phi-4 model loaded successfully.")
         except Exception as e:
