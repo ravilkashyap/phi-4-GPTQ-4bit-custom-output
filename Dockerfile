@@ -7,7 +7,7 @@ RUN pip3 install pydantic==2.1.1
 RUN pip3 install pydantic_core==2.4.0
 RUN pip3 install urllib3==2.0.4
 RUN pip3 install uvicorn==0.23.2
-RUN pip3 install transformers
+RUN pip3 install transformers==4.49.0
 RUN pip3 install torch==2.0.1
 RUN pip3 install accelerate
 COPY ./main.py /app/main.py
