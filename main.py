@@ -140,7 +140,6 @@ async def healthcheck():
 @app.post("/generate")
 async def generate(request: InferRequest):
     """Generate text based on input prompt and parameters."""
-    """Generate text based on input prompt and parameters."""
     try:
         # Ensure prompt is provided
         if not request.prompt:
@@ -155,16 +154,14 @@ async def generate(request: InferRequest):
             max_tokens=request.max_tokens,
             top_k=request.top_k,
         )
-        logger.info("generated_text: ",generated_text)
-
+        logger.info("generated_text: %s", generated_text)
         extracted_json = postprocessing(str(generated_text))
 
-        
         messages_prompt = {}
         if request.system_prompt:
-            messages_prompt["system"] = request.system_prompt[0]
+            messages_prompt["system"] = request.system_prompt
         if request.prompt:
-            messages_prompt["user"] = request.prompt[0]
+            messages_prompt["user"] = request.prompt
 
         # Build response
         response = {
@@ -173,9 +170,9 @@ async def generate(request: InferRequest):
                     "prompt": [messages_prompt],
                     "output": [extracted_json],  # Output as a list
                     "params": {
-                        "temperature": request.temperature[0],
-                        "top_k": request.top_k[0],
-                        "top_p": request.top_p[0],
+                        "temperature": request.temperature,
+                        "top_k": request.top_k,
+                        "top_p": request.top_p,
                     }
                 }
             ],
