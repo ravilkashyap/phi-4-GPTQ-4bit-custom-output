@@ -116,13 +116,13 @@ except RuntimeError as e:
 
 
 @app.get("/healthcheck", status_code=200)
-def healthcheck():
+async def healthcheck():
     """Health check endpoint to verify the service status."""
     return {"status": "ok"}
 
 
 @app.post("/generate")
-def generate(request: InferRequest):
+async def generate(request: InferRequest):
     """Generate text based on input prompt and parameters."""
     try:
         generated_text = model.generate(
