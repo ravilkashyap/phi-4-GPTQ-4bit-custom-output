@@ -141,9 +141,10 @@ async def healthcheck():
 async def generate(request: InferRequest):
     """Generate text based on input prompt and parameters."""
     try:
-        # Ensure prompt is provided
-        if not request.prompt:
-            raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
+        logger.info(f"Received Request - {request}")
+        # # Ensure prompt is provided
+        # if not request.prompt:
+        #     raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
 
         # Call the model inference function
         generated_text = model.infer(
